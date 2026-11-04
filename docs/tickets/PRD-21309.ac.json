@@ -1,0 +1,114 @@
+[
+  {
+    "id": "TC1",
+    "ac": "AC1",
+    "text": "Given valid credentials, when the agent calls initialize then tools/list, then the response lists 14 tools, every name starts with intercom_, and each description is a single verb-first sentence",
+    "type": "auto",
+    "tests": ["tests/test_tools.py::test_tools_list_snapshot"],
+    "result": "pass",
+    "evidence": "uv run pytest tests/test_tools.py::test_tools_list_snapshot -> 1 passed; confirmed live over HTTP: initialize + tools/list against a running `uv run python -m intercom_mcp` server with a placeholder X-Intercom-Access-Token returned HTTP 200 and 14 tools, all intercom_*, each a single verb-first sentence (see docs/tickets/PRD-21309.md Self-test)"
+  },
+  {
+    "id": "TC2",
+    "ac": "AC2",
+    "text": "Given a request with X-Intercom-Access-Token missing, when any intercom_* tool is called, then the response is HTTP 401 with code not_configured and the message names the missing header",
+    "type": "auto",
+    "tests": ["tests/test_middleware.py::test_missing_access_token_header_returns_401_with_header_name"],
+    "result": "pass",
+    "evidence": "uv run pytest tests/test_middleware.py::test_missing_access_token_header_returns_401_with_header_name -> 1 passed; confirmed live over HTTP: POST /mcp without the header against a running server returned HTTP 401 with body {\"error\":{\"code\":\"not_configured\",\"message\":\"Missing required header(s): X-Intercom-Access-Token\",\"retryable\":false}}"
+  },
+  {
+    "id": "TC3",
+    "ac": "AC3",
+    "text": "Given valid credentials, when intercom_search_contacts is called with a known email on a live workspace, then that contact is returned; a bogus email returns an empty list with has_more false, not an error",
+    "type": "manual",
+    "steps": [
+      "Obtain a real Intercom Personal Access Token for a test workspace",
+      "Call intercom_search_contacts with email=<a known seeded contact's email>",
+      "Call intercom_search_contacts with email=definitely-not-a-contact@example.invalid"
+    ],
+    "expect": "First call returns the known contact's id and email; second call returns an empty contacts array with has_more=false and no error envelope",
+    "result": "blocked",
+    "evidence": "needs a real vendor account; no Intercom test workspace available to this pipeline run"
+  },
+  {
+    "id": "TC4",
+    "ac": "AC3",
+    "text": "Given valid credentials, when intercom_get_conversation is called on a known conversation id, then the conversation is returned including its conversation_parts thread",
+    "type": "manual",
+    "steps": [
+      "With a real Intercom workspace, note a conversation id with at least 2 replies",
+      "Call intercom_get_conversation with that id"
+    ],
+    "expect": "Response includes the conversation and a conversation_parts list with every reply in order",
+    "result": "blocked",
+    "evidence": "needs a real vendor account"
+  },
+  {
+    "id": "TC5",
+    "ac": "AC4",
+    "text": "Given valid credentials, when intercom_create_contact is called with a new email, then a contact is created in the tenant's real Intercom workspace and the tool returns its id",
+    "type": "manual",
+    "steps": [
+      "Call intercom_create_contact with a fresh, not-previously-used email",
+      "Open the Intercom UI for the same workspace and search that email"
+    ],
+    "expect": "Tool response id matches the contact now visible in Intercom's own UI",
+    "result": "blocked",
+    "evidence": "needs a real vendor account"
+  },
+  {
+    "id": "TC6",
+    "ac": "AC4",
+    "text": "Given valid credentials, when intercom_reply_conversation is called with message_type comment vs note, then a public reply (visible to the customer) or an internal note (not visible to the customer) is posted respectively",
+    "type": "manual",
+    "steps": [
+      "Call intercom_reply_conversation(message_type='comment') on a test conversation",
+      "Call intercom_reply_conversation(message_type='note') on the same conversation",
+      "Open the conversation in Intercom's UI"
+    ],
+    "expect": "The comment reply is shown as visible to the end customer; the note is shown as an internal-only note",
+    "result": "blocked",
+    "evidence": "needs a real vendor account"
+  },
+  {
+    "id": "TC7",
+    "ac": "AC5",
+    "text": "Given a mocked Intercom response of 401/404/422/429/5xx, when a tool call receives it, then the error envelope code matches (unauthorized/not_found/invalid_argument/rate_limited/upstream_error) and a 429 is retried with backoff before surfacing",
+    "type": "auto",
+    "tests": ["tests/test_tools.py::test_status_to_error_code_mapping", "tests/test_tools.py::test_429_is_retried_with_backoff_before_surfacing"],
+    "result": "pass",
+    "evidence": "uv run pytest -k 'status_to_error_code_mapping or 429_is_retried or 429_surfaces' -> 9 passed (7 status-code cases parametrized + retry-then-succeed + retry-exhausted-surfaces-rate_limited); confirmed live: a placeholder token against the real Intercom API mapped Intercom's 401 to {\"error\":{\"code\":\"unauthorized\",\"message\":\"Access Token Invalid\",\"retryable\":false}} with isError:false (in-band JSON error, not a protocol error), matching SOP S4"
+  },
+  {
+    "id": "TC8",
+    "ac": "AC6",
+    "text": "Given no X-Intercom-Region header, when a read tool is called against a US-region workspace, then the call succeeds using the default US API host",
+    "type": "manual",
+    "steps": [
+      "Call any read tool (e.g. intercom_list_admins) with only X-Intercom-Access-Token set, no region header",
+      "Confirm the workspace used is a standard US-region Intercom account"
+    ],
+    "expect": "Call succeeds (200-level result), connector used https://api.intercom.io",
+    "result": "blocked",
+    "evidence": "needs a real vendor account (US workspace)"
+  },
+  {
+    "id": "TC9",
+    "ac": "AC7",
+    "text": "Given two simulated concurrent requests carrying different X-Intercom-Access-Token values, when both are handled at the same time, then neither request's token or response data is observable from the other",
+    "type": "auto",
+    "tests": ["tests/test_middleware.py::test_concurrent_requests_do_not_leak_credentials_across_contextvars"],
+    "result": "pass",
+    "evidence": "uv run pytest tests/test_middleware.py::test_concurrent_requests_do_not_leak_credentials_across_contextvars -> 1 passed; two asyncio.gather'd requests with different tokens, each reading the ContextVar before and after an await point, each only ever saw its own token -- this is the test that would catch a global/module-level credential variable (SOP S3.3)"
+  },
+  {
+    "id": "TC10",
+    "ac": "AC2",
+    "text": "Given no Intercom credentials configured anywhere, when GET /health is called, then it returns 200 (health check never depends on upstream reachability)",
+    "type": "auto",
+    "tests": ["tests/test_tools.py::test_health_endpoint_ok_without_any_credentials"],
+    "result": "pass",
+    "evidence": "uv run pytest tests/test_tools.py::test_health_endpoint_ok_without_any_credentials -> 1 passed; confirmed live: curl GET /health against a running server with zero Intercom headers/env returned HTTP 200 {\"status\":\"ok\"}"
+  }
+]
