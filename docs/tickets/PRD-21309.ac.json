@@ -4,14 +4,18 @@
     "ac": "AC1",
     "text": "Given valid credentials, when the agent calls initialize then tools/list, then the response lists 14 tools, every name starts with intercom_, and each description is a single verb-first sentence",
     "type": "auto",
-    "tests": ["tests/test_tools.py::test_tools_list_snapshot"]
+    "tests": ["tests/test_tools.py::test_tools_list_snapshot"],
+    "result": "pass",
+    "evidence": "uv run pytest tests/test_tools.py::test_tools_list_snapshot -> 1 passed; confirmed live over HTTP: initialize + tools/list against a running `uv run python -m intercom_mcp` server with a placeholder X-Intercom-Access-Token returned HTTP 200 and 14 tools, all intercom_*, each a single verb-first sentence (see docs/tickets/PRD-21309.md Self-test)"
   },
   {
     "id": "TC2",
     "ac": "AC2",
     "text": "Given a request with X-Intercom-Access-Token missing, when any intercom_* tool is called, then the response is HTTP 401 with code not_configured and the message names the missing header",
     "type": "auto",
-    "tests": ["tests/test_middleware.py::test_missing_access_token_header_returns_401_with_header_name"]
+    "tests": ["tests/test_middleware.py::test_missing_access_token_header_returns_401_with_header_name"],
+    "result": "pass",
+    "evidence": "uv run pytest tests/test_middleware.py::test_missing_access_token_header_returns_401_with_header_name -> 1 passed; confirmed live over HTTP: POST /mcp without the header against a running server returned HTTP 401 with body {\"error\":{\"code\":\"not_configured\",\"message\":\"Missing required header(s): X-Intercom-Access-Token\",\"retryable\":false}}"
   },
   {
     "id": "TC3",
@@ -72,7 +76,9 @@
     "ac": "AC5",
     "text": "Given a mocked Intercom response of 401/404/422/429/5xx, when a tool call receives it, then the error envelope code matches (unauthorized/not_found/invalid_argument/rate_limited/upstream_error) and a 429 is retried with backoff before surfacing",
     "type": "auto",
-    "tests": ["tests/test_tools.py::test_status_to_error_code_mapping", "tests/test_tools.py::test_429_is_retried_with_backoff_before_surfacing"]
+    "tests": ["tests/test_tools.py::test_status_to_error_code_mapping", "tests/test_tools.py::test_429_is_retried_with_backoff_before_surfacing"],
+    "result": "pass",
+    "evidence": "uv run pytest -k 'status_to_error_code_mapping or 429_is_retried or 429_surfaces' -> 9 passed (7 status-code cases parametrized + retry-then-succeed + retry-exhausted-surfaces-rate_limited); confirmed live: a placeholder token against the real Intercom API mapped Intercom's 401 to {\"error\":{\"code\":\"unauthorized\",\"message\":\"Access Token Invalid\",\"retryable\":false}} with isError:false (in-band JSON error, not a protocol error), matching SOP S4"
   },
   {
     "id": "TC8",
@@ -92,13 +98,17 @@
     "ac": "AC7",
     "text": "Given two simulated concurrent requests carrying different X-Intercom-Access-Token values, when both are handled at the same time, then neither request's token or response data is observable from the other",
     "type": "auto",
-    "tests": ["tests/test_middleware.py::test_concurrent_requests_do_not_leak_credentials_across_contextvars"]
+    "tests": ["tests/test_middleware.py::test_concurrent_requests_do_not_leak_credentials_across_contextvars"],
+    "result": "pass",
+    "evidence": "uv run pytest tests/test_middleware.py::test_concurrent_requests_do_not_leak_credentials_across_contextvars -> 1 passed; two asyncio.gather'd requests with different tokens, each reading the ContextVar before and after an await point, each only ever saw its own token -- this is the test that would catch a global/module-level credential variable (SOP S3.3)"
   },
   {
     "id": "TC10",
     "ac": "AC2",
     "text": "Given no Intercom credentials configured anywhere, when GET /health is called, then it returns 200 (health check never depends on upstream reachability)",
     "type": "auto",
-    "tests": ["tests/test_tools.py::test_health_endpoint_ok_without_any_credentials"]
+    "tests": ["tests/test_tools.py::test_health_endpoint_ok_without_any_credentials"],
+    "result": "pass",
+    "evidence": "uv run pytest tests/test_tools.py::test_health_endpoint_ok_without_any_credentials -> 1 passed; confirmed live: curl GET /health against a running server with zero Intercom headers/env returned HTTP 200 {\"status\":\"ok\"}"
   }
 ]
